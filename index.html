@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fibonacci in Browser</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.0/full/pyodide.js"></script>
+</head>
+<body>
+    <h2>Calculate Fibonacci Sequence in the Browser</h2>
+    <label for="num">Enter a number:</label>
+    <input type="number" id="num" value="10">
+    <button onclick="runPython()">Run</button>
+    <pre id="output"></pre>
+
+    <script>
+        async function loadPyodideAndRun() {
+            window.pyodide = await loadPyodide();
+            document.getElementById("output").textContent = "Pyodide Loaded!";
+        }
+        loadPyodideAndRun();
+
+        async function runPython() {
+            let n = document.getElementById("num").value;
+            let pythonCode = `
+def fibonacci(n):
+    a, b = 0, 1
+    sequence = []
+    for _ in range(n):
+        sequence.append(a)
+        a, b = b, a + b
+    return sequence
+
+fibonacci(${n})
+            `;
+            try {
+                let output = await pyodide.runPythonAsync(pythonCode);
+                document.getElementById("output").textContent = "Fibonacci Sequence: " + output;
+            } catch (err) {
+                document.getElementById("output").textContent = "Error: " + err;
+            }
+        }
+    </script>
+</body>
+</html>
