@@ -3,43 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fibonacci in Browser</title>
+    <title>Data Modeling in Browser</title>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.24.0/full/pyodide.js"></script>
 </head>
 <body>
-    <h2>Calculate Fibonacci Sequence in the Browser</h2>
-    <label for="num">Enter a number:</label>
-    <input type="number" id="num" value="10">
-    <button onclick="runPython()">Run</button>
-    <pre id="output"></pre>
+    <h2>Upload CSV and Run Data Modeling</h2>
+    <input type="file" id="fileInput" accept=".csv" />
+    <pre id="output">Pyodide loading...</pre>
 
-    <script>
-        async function loadPyodideAndRun() {
-            window.pyodide = await loadPyodide();
-            document.getElementById("output").textContent = "Pyodide Loaded!";
+    <script type="module">
+        let pyodide;
+
+        async function main() {
+            pyodide = await loadPyodide();
+            await pyodide.loadPackage("micropip");
+
+            const installCode = `
+import micropip
+await micropip.install("xgboost")
+`;
+
+            await pyodide.runPythonAsync(installCode);
+            await pyodide.loadPackage(["pandas", "scikit-learn"]);
+            document.getElementById("output").textContent = " Pyodide and xgboost loaded. Upload a CSV file to begin.";
         }
-        loadPyodideAndRun();
 
-        async function runPython() {
-            let n = document.getElementById("num").value;
-            let pythonCode = `
-def fibonacci(n):
-    a, b = 0, 1
-    sequence = []
-    for _ in range(n):
-        sequence.append(a)
-        a, b = b, a + b
-    return sequence
+        main();
 
-fibonacci(${n})
-            `;
+        document.getElementById("fileInput").addEventListener("change", async function () {
+            const file = this.files[0];
+            if (!file) return;
+
+            const text = await file.text();
+            pyodide.FS.writeFile("uploaded.csv", text);
+            
+          
+
+     const pythonCode = `
+import sys
+from io import StringIO
+
+# Redirect stdout
+old_stdout = sys.stdout
+sys.stdout = mystdout = StringIO()
+
+try:
+    import pandas as pd
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import roc_auc_score
+    from xgboost import XGBClassifier
+
+    # Load data
+    df = pd.read_csv("uploaded.csv")
+
+    feature_columns = ['Model_woe_bin', 'Branch_woe_bin', 'State_woe_bin','Business_Type',
+                     'NCB_Percent','Vehicle_Age','Claim_Amount','Product_woe_bin',
+                     'Insurance_Declared_Value_IDV']
+
+    # Check for missing columns
+    missing = [col for col in feature_columns + ['Target'] if col not in df.columns]
+    if missing:
+        print("❌ Missing columns in uploaded CSV:", missing)
+    else:
+        X = df[feature_columns]
+        y = df['Target']
+
+        # Handle categorical features
+        X = pd.get_dummies(X)
+
+        # Train-test split
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        # Train XGBoost model
+        model = XGBClassifier(use_label_encoder=False, eval_metric='logloss')
+        model.fit(X_train, y_train)
+
+        # Predict and calculate AUC
+        y_pred_prob = model.predict_proba(X_test)[:, 1]
+        roc_auc = roc_auc_score(y_test, y_pred_prob)
+
+        print(f"✅ ROC-AUC Score: {roc_auc:.4f}")
+except Exception as e:
+    print("❌ Error during execution:", str(e))
+
+# Reset stdout and return printed text
+sys.stdout = old_stdout
+mystdout.getvalue()
+`;
+
             try {
-                let output = await pyodide.runPythonAsync(pythonCode);
-                document.getElementById("output").textContent = "Fibonacci Sequence: " + output;
+                const result = await pyodide.runPythonAsync(pythonCode);
+                document.getElementById("output").textContent = result;
             } catch (err) {
-                document.getElementById("output").textContent = "Error: " + err;
+                document.getElementById("output").textContent = "❌ Error: " + err;
             }
-        }
+        });
     </script>
 </body>
 </html>
